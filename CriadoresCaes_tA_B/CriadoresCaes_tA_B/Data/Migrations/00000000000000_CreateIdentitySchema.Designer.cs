@@ -9,7 +9,7 @@ using System;
 
 namespace CriadoresCaes_tA_B.Data.Migrations
 {
-    [DbContext(typeof(ApplicationDbContext))]
+    [DbContext(typeof(CriadoresCaesDB))]
     [Migration("00000000000000_CreateIdentitySchema")]
     partial class CreateIdentitySchema
     {
