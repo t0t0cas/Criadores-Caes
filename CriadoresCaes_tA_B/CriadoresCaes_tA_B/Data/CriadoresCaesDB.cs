@@ -11,8 +11,6 @@ namespace CriadoresCaes_tA_B.Data
 {
     public class CriadoresCaesDB : IdentityDbContext
     {
-
-
         // construtor da classe CriadoresCaesDB
         // indicar onde está a BD à qual estas classes (tabelas) serão associadas
         // ver o conteúdo do ficheiro 'startup.cs'

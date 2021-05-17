@@ -10,10 +10,13 @@ using CriadoresCaes_tA_B.Models;
 using Microsoft.AspNetCore.Http;
 using System.IO;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 
 namespace CriadoresCaes_tA_B.Controllers
 {
 
+    [Authorize] //esta 'anotação' garante que só as pessoas autenticadas têm acesso aos recursos
     public class FotografiasController : Controller
     {
 
@@ -27,15 +30,25 @@ namespace CriadoresCaes_tA_B.Controllers
         /// </summary>
         private readonly IWebHostEnvironment _caminho;
 
+        /// <summary>
+        /// esta variável recolhe os dados da pessoa que se autenticou 
+        /// </summary>
+        private readonly UserManager<ApplicationIdentity> _userManager;
+
         public FotografiasController(
            CriadoresCaesDB context,
-           IWebHostEnvironment caminho)
+           IWebHostEnvironment caminho,
+           UserManager<ApplicationIdentity> userManager)
         {
             _context = context;
             _caminho = caminho;
+            _userManager = userManager;
         }
 
-        // GET: Fotografias
+        /// <summary>
+        /// Mostra uma lista de imagens dos cães dos criadores 
+        /// </summary>
+        /// <returns></returns>
         public async Task<IActionResult> Index()
         {
 
@@ -43,8 +56,11 @@ namespace CriadoresCaes_tA_B.Controllers
             * vindos da base de dados
             * se fosse em SQL, a pesquisa seria:
             *     SELECT *
-            *     FROM Fotografias f, Caes c
-            *     WHERE f.CaoFK = c.Id
+            *     FROM Fotografias f, Caes c, Criadores cr, CriadoresCaes cc
+            *     WHERE f.CaoFK = c.Id AND 
+            *           cc.CaoFK = c.ID AND
+            *           cc.CriadorFK = cr.ID AND
+            *           cr.UserName = ID da pessoa que se autenticou
             *  exatamente equivalente a _context.Fotografias.Include(f => f.Cao), feita em LINQ
             *  f => f.Cao  <---- expressão 'lambda'
             *  ^ ^  ^
@@ -57,7 +73,8 @@ namespace CriadoresCaes_tA_B.Controllers
             *  |
             *  representa todos registos das fotografias
             */
-            var fotografias = _context.Fotografias.Include(f => f.Cao);
+            var fotografias = _context.Fotografias.Include(f => f.Cao).ThenInclude(c=>c.ListaCriadores)
+                                                  .ThenInclude(cc=>cc.Criador.UserName == _userManager.GetUserId(User));
 
             // invoca a View, entregando-lhe a lista de registos
             return View(await fotografias.ToListAsync());
