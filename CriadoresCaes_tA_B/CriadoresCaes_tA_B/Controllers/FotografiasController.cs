@@ -15,8 +15,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace CriadoresCaes_tA_B.Controllers
 {
-
-    [Authorize] //esta 'anotação' garante que só as pessoas autenticadas têm acesso aos recursos
+    [Authorize] // esta 'anotação' garante que só as pessoas autenticadas têm acesso aos recursos
     public class FotografiasController : Controller
     {
 
@@ -31,14 +30,14 @@ namespace CriadoresCaes_tA_B.Controllers
         private readonly IWebHostEnvironment _caminho;
 
         /// <summary>
-        /// esta variável recolhe os dados da pessoa que se autenticou 
+        /// esta variável recolhe os dados da pessoa q se autenticou
         /// </summary>
-        private readonly UserManager<ApplicationIdentity> _userManager;
+        private readonly UserManager<IdentityUser> _userManager;
 
         public FotografiasController(
            CriadoresCaesDB context,
            IWebHostEnvironment caminho,
-           UserManager<ApplicationIdentity> userManager)
+           UserManager<IdentityUser> userManager)
         {
             _context = context;
             _caminho = caminho;
@@ -46,9 +45,11 @@ namespace CriadoresCaes_tA_B.Controllers
         }
 
         /// <summary>
-        /// Mostra uma lista de imagens dos cães dos criadores 
+        /// Mostra uma lista de imagens dos cães dos criadores
         /// </summary>
         /// <returns></returns>
+        [AllowAnonymous] // anula a necessidade de um utilizador estar autenticado
+                         // para aceder a este método
         public async Task<IActionResult> Index()
         {
 
@@ -57,9 +58,9 @@ namespace CriadoresCaes_tA_B.Controllers
             * se fosse em SQL, a pesquisa seria:
             *     SELECT *
             *     FROM Fotografias f, Caes c, Criadores cr, CriadoresCaes cc
-            *     WHERE f.CaoFK = c.Id AND 
-            *           cc.CaoFK = c.ID AND
-            *           cc.CriadorFK = cr.ID AND
+            *     WHERE f.CaoFK = c.Id AND
+            *           cc.CaoFK = c.Id AND
+            *           cc.CriadorFK = cr.Id AND
             *           cr.UserName = ID da pessoa que se autenticou
             *  exatamente equivalente a _context.Fotografias.Include(f => f.Cao), feita em LINQ
             *  f => f.Cao  <---- expressão 'lambda'
@@ -73,11 +74,38 @@ namespace CriadoresCaes_tA_B.Controllers
             *  |
             *  representa todos registos das fotografias
             */
-            var fotografias = _context.Fotografias.Include(f => f.Cao).ThenInclude(c=>c.ListaCriadores)
-                                                  .ThenInclude(cc=>cc.Criador.UserName == _userManager.GetUserId(User));
+            //var fotografias = _context.Fotografias
+            //                          .Include(f => f.Cao)
+            //                          .ThenInclude(c => c.ListaCriadores)
+            //                          .ThenInclude(cc => cc.Criador);
+            //                         // .Where(cr=>cr.UserName == _userManager.GetUserId(User));
 
-            // invoca a View, entregando-lhe a lista de registos
-            return View(await fotografias.ToListAsync());
+
+            // dados de todas as fotografias
+            var fotografias = await _context.Fotografias.Include(f => f.Cao).ToListAsync();
+
+            // var. auxiliar
+            string idDaPessoaAutenticada = _userManager.GetUserId(User);
+
+            // quais os cães que pertencem à pessoa que está autenticada?
+            // quais os seus IDs?
+            var caes = await (from c in _context.Caes
+                              join cc in _context.CriadoresCaes on c.Id equals cc.CaoFK
+                              join cr in _context.Criadores on cc.CriadorFK equals cr.Id
+                              where cr.UserName == idDaPessoaAutenticada
+                              select c.Id)
+                             .ToListAsync();
+
+            // transportar os dois objetos para a View
+            // iremos usar um ViewModel
+            var fotos = new FotosCaes
+            {
+                ListaCaes = caes,
+                ListaFotografias = fotografias
+            };
+
+            // invoca a View, entregando-lhe a lista de registos das fotografias e dos cães
+            return View(fotos);
         }
 
 
@@ -150,7 +178,17 @@ namespace CriadoresCaes_tA_B.Controllers
              * e, a minha expressão fica: _context.Caes.OrderBy(c=>c.Nome)
              * 
             */
-            ViewData["CaoFK"] = new SelectList(_context.Caes.OrderBy(c => c.Nome), "Id", "Nome");
+
+            // _context.Caes.OrderBy(c => c.Nome)  -> obtem a lista de todos os Cães
+            // mas, queremos apenas a lista de cães do utilizador autenticado
+            var caes = (from c in _context.Caes
+                        join cc in _context.CriadoresCaes on c.Id equals cc.CaoFK
+                        join cr in _context.Criadores on cc.CriadorFK equals cr.Id
+                        where cr.UserName == _userManager.GetUserId(User)
+                        select c)
+                       .OrderBy(c => c.Nome);
+
+            ViewData["CaoFK"] = new SelectList(caes, "Id", "Nome");
 
 
             return View();
@@ -173,7 +211,13 @@ namespace CriadoresCaes_tA_B.Controllers
                 // não foi escolhido um cão válido 
                 ModelState.AddModelError("", "Não se esqueça de escolher um cão...");
                 // devolver o controlo à View
-                ViewData["CaoFK"] = new SelectList(_context.Caes.OrderBy(c => c.Nome), "Id", "Nome");
+                var caes = (from c in _context.Caes
+                            join cc in _context.CriadoresCaes on c.Id equals cc.CaoFK
+                            join cr in _context.Criadores on cc.CriadorFK equals cr.Id
+                            where cr.UserName == _userManager.GetUserId(User)
+                            select c)
+                       .OrderBy(c => c.Nome);
+                ViewData["CaoFK"] = new SelectList(caes, "Id", "Nome");
                 return View(foto);
             }
 
@@ -200,7 +244,13 @@ namespace CriadoresCaes_tA_B.Controllers
                 // adicionar msg de erro
                 ModelState.AddModelError("", "Adicione, por favor, a fotografia do cão");
                 // devolver o controlo à View
-                ViewData["CaoFK"] = new SelectList(_context.Caes.OrderBy(c => c.Nome), "Id", "Nome");
+                var caes = (from c in _context.Caes
+                            join cc in _context.CriadoresCaes on c.Id equals cc.CaoFK
+                            join cr in _context.Criadores on cc.CriadorFK equals cr.Id
+                            where cr.UserName == _userManager.GetUserId(User)
+                            select c)
+                      .OrderBy(c => c.Nome);
+                ViewData["CaoFK"] = new SelectList(caes, "Id", "Nome");
                 return View(foto);
             }
             else
@@ -231,7 +281,14 @@ namespace CriadoresCaes_tA_B.Controllers
                     // adicionar msg de erro
                     ModelState.AddModelError("", "Só pode escolher uma imagem para a associar ao cão");
                     // devolver o controlo à View
-                    ViewData["CaoFK"] = new SelectList(_context.Caes.OrderBy(c => c.Nome), "Id", "Nome");
+                    var caes = (from c in _context.Caes
+                                join cc in _context.CriadoresCaes on c.Id equals cc.CaoFK
+                                join cr in _context.Criadores on cc.CriadorFK equals cr.Id
+                                where cr.UserName == _userManager.GetUserId(User)
+                                select c)
+                       .OrderBy(c => c.Nome);
+
+                    ViewData["CaoFK"] = new SelectList(caes, "Id", "Nome");
                     return View(foto);
                 }
             }
